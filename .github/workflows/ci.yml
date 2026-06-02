@@ -77,7 +77,7 @@ jobs:
         run: pyinstaller build.spec
 
       - name: Install Inno Setup 6
-        run: choco install innosetup --version=6.7.3 -y --no-progress
+        run: choco install innosetup -y --no-progress
 
       - name: Install Chinese language file
         shell: pwsh
