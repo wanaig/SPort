@@ -20,16 +20,36 @@
 - **中英双语界面** — 浏览器中持久化
 - **完全本地运行** — 无遥测、无网络请求、数据不离开本机
 
-## 快速开始
+## 安装
+
+下载适合你系统的版本，双击运行。
+
+| 形式 | 体积 | 说明 |
+| --- | --- | --- |
+| **SPort-Setup-x.x.x.exe**（推荐） | ~12 MB | 标准 Windows 安装器，可从"应用和功能"卸载；安装到 `%LOCALAPPDATA%\SPort\`；可选桌面快捷方式、开机自启 |
+| **SPort.exe**（便携） | ~23 MB | 单文件，丢到任意目录双击即可；无注册表项、无卸载入口 |
+
+从 [Releases](https://github.com/wanaig/SPort/releases) 下载。
+
+**首次运行**：Windows SmartScreen 会弹"Windows protected your PC"。点 **更多信息** → **仍要运行** 即可（项目未做代码签名）。
+
+**首次启动行为**：
+- 任务栏右下角出现 SPort 图标
+- 默认浏览器自动打开 <http://127.0.0.1:7777>（安装版可在安装时取消勾选"启动 SPort"避免自动开浏览器）
+- 右键托盘图标：打开面板 / 暂停 / 开机自启 / 端口通知 / 退出
+
+**再次启动**：从开始菜单 / 桌面 / 文件管理器双击即可。已在后台运行时再次启动会唤起浏览器，不会重复开服务器。
+
+## 快速开始（从源码运行）
+
+不下载预编译包，直接从源码跑：
 
 ```bash
 git clone https://github.com/wanaig/SPort.git
 cd SPort
 pip install -r requirements.txt
-python app.py
+python tray.py          # 带托盘；或 python app.py 只跑 Flask
 ```
-
-Windows 上也可双击 `start.bat`（自动处理 pip install + 启动）。
 
 随后访问 <http://127.0.0.1:7777>。
 
@@ -64,14 +84,34 @@ Windows 上也可双击 `start.bat`（自动处理 pip install + 启动）。
 ```
 SPort/
 ├── app.py                  Flask 后端，扫描、终止、详情 API
+├── tray.py                 托盘入口（pystray、菜单、单实例协调）
+├── singleinstance.py       Windows 命名互斥体 + 命名管道
+├── autostart.py            注册表 Run 项读写
+├── build.spec              PyInstaller 打包配置
+├── installer.iss           Inno Setup 安装脚本
+├── build.bat               一键构建：PyInstaller + Inno Setup
+├── assets/
+│   └── sport.ico           多尺寸应用图标
 ├── requirements.txt
-├── start.bat               Windows 一键启动
+├── start.bat               Windows 一键启动（开发用）
 ├── templates/
 │   └── index.html          面板结构
 └── static/
     ├── style.css           深色主题
     └── app.js              i18n、渲染、弹窗、过滤逻辑
 ```
+
+## 构建
+
+```bash
+pip install pyinstaller            # + Inno Setup 6（从 jrsoftware.org 下载）
+python -m pip install -r requirements.txt
+build.bat
+```
+
+产出：
+- `dist/SPort.exe` — 单文件可执行（~23 MB）
+- `dist/SPort-Setup-0.2.0.exe` — Windows 安装器（~12 MB）
 
 ## API
 
@@ -110,16 +150,34 @@ When you run a dozen microservices locally, port conflicts (`EADDRINUSE`) are co
 - **Bilingual UI** — 中文 / English, persisted per browser
 - **Local-only** — no telemetry, no network calls, no data leaves the machine
 
-## Quick start
+## Install
+
+Download a prebuilt release, or run from source.
+
+| Distribution | Size | Notes |
+| --- | --- | --- |
+| **SPort-Setup-x.x.x.exe** (recommended) | ~12 MB | Standard Windows installer; uninstallable via Settings → Apps; installs to `%LOCALAPPDATA%\SPort\`; optional desktop shortcut and autostart |
+| **SPort.exe** (portable) | ~23 MB | Single file, drop anywhere and run; no registry entries, no uninstaller |
+
+Download from [Releases](https://github.com/wanaig/SPort/releases).
+
+**First run**: Windows SmartScreen may show "Windows protected your PC". Click **More info** → **Run anyway** (the project is not code-signed).
+
+**After launch**:
+- SPort icon appears in the system tray
+- Default browser opens <http://127.0.0.1:7777>
+- Right-click the tray icon: open dashboard, pause, autostart, port notifications, quit
+
+**Subsequent launches**: a second launch wakes the running instance's browser instead of starting a duplicate server.
+
+## Quick start (from source)
 
 ```bash
 git clone https://github.com/wanaig/SPort.git
 cd SPort
 pip install -r requirements.txt
-python app.py
+python tray.py          # tray + Flask; or python app.py for Flask only
 ```
-
-Or on Windows, double-click `start.bat` (handles pip install + launch).
 
 Then open <http://127.0.0.1:7777>.
 
@@ -154,14 +212,34 @@ For full visibility into protected processes, run as Administrator. PPL processe
 ```
 SPort/
 ├── app.py                  Flask backend, scan, kill, detail APIs
+├── tray.py                 Tray entry (pystray, menu, single-instance)
+├── singleinstance.py       Windows named mutex + named pipe
+├── autostart.py            Registry Run key read/write
+├── build.spec              PyInstaller config
+├── installer.iss           Inno Setup script
+├── build.bat               One-shot build: PyInstaller + Inno Setup
+├── assets/
+│   └── sport.ico           Multi-resolution app icon
 ├── requirements.txt
-├── start.bat               Windows one-click launcher
+├── start.bat               Windows one-click launcher (dev)
 ├── templates/
 │   └── index.html          Dashboard markup
 └── static/
     ├── style.css           Dark theme
     └── app.js              I18n, render, modal, filter logic
 ```
+
+## Building
+
+```bash
+pip install pyinstaller            # + Inno Setup 6 from jrsoftware.org
+python -m pip install -r requirements.txt
+build.bat
+```
+
+Outputs:
+- `dist/SPort.exe` — single-file executable (~23 MB)
+- `dist/SPort-Setup-0.2.0.exe` — Windows installer (~12 MB)
 
 ## API
 
