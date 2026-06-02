@@ -31,6 +31,16 @@ HOST = os.environ.get("HOST", "127.0.0.1")
 SILENT = "--silent" in sys.argv
 DASHBOARD_URL = f"http://{HOST}:{PORT}"
 
+
+def bundle_root():
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+app.template_folder = os.path.join(bundle_root(), "templates")
+app.static_folder = os.path.join(bundle_root(), "static")
+
 _instance = SingleInstance("SPort")
 atexit.register(_instance.release)
 
@@ -132,12 +142,14 @@ def make_icon():
     return img
 
 
-_ICON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "sport.ico")
+_ICON_PATH = os.path.join(bundle_root(), "assets", "sport.ico")
 
 
 def _ensure_icon_saved():
     if os.path.exists(_ICON_PATH):
         return _ICON_PATH
+    if getattr(sys, "frozen", False):
+        return None
     try:
         os.makedirs(os.path.dirname(_ICON_PATH), exist_ok=True)
         base = make_icon()

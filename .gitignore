@@ -21,5 +21,8 @@ Thumbs.db
 out.log
 err.log
 
+dist/
+build/
+
 # Local override files
 *.local
