@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Syntax check
+        run: python -m py_compile app.py
+
+      - name: Smoke test
+        run: |
+          python -c "
+          from app import app, scan_ports, _is_system_process, SYSTEM_PROCESSES, SYSTEM_USERS
+
+          s = scan_ports()
+          items = s['items']
+          sys_items = [r for r in items if r['is_system']]
+          assert s['summary']['hidden'] == len(sys_items), 'summary.hidden mismatch'
+          assert len(SYSTEM_PROCESSES) >= 40, 'SYSTEM_PROCESSES should have 40+ entries'
+          assert 'svchost.exe' in SYSTEM_PROCESSES
+          assert len(SYSTEM_USERS) >= 4, 'SYSTEM_USERS should have 4+ entries'
+
+          with app.test_client() as c:
+              r = c.get('/api/ports')
+              assert r.status_code == 200, f'/api/ports returned {r.status_code}'
+              assert r.get_json()['summary']['total'] >= 0
+
+              r = c.get('/api/system-processes')
+              assert r.status_code == 200
+              j = r.get_json()
+              assert 'builtin' in j and 'users' in j
+              assert len(j['builtin']) >= 40
+
+          print(f'OK: {s[\"summary\"][\"total\"]} ports, {len(sys_items)} system, {len(SYSTEM_PROCESSES)} known system procs')
+          "
