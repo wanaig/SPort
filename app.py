@@ -389,8 +389,16 @@ def get_local_ip():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 7777))
-    host = os.environ.get("HOST", "127.0.0.1")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="SPort — real-time port monitor")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 7777)),
+                        help="HTTP port (default: 7777, or $PORT)")
+    parser.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"),
+                        help="Bind address (default: 127.0.0.1, or $HOST)")
+    args = parser.parse_args()
+
+    port, host = args.port, args.host
     print("\n  SPort — Real-time port monitor")
     print(f"  ─────────────────────────────────────────")
     print(f"  Local:    http://{host}:{port}")

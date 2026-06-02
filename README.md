@@ -53,6 +53,14 @@ python tray.py          # 带托盘；或 python app.py 只跑 Flask
 
 随后访问 <http://127.0.0.1:7777>。
 
+要换端口 / 监听地址（避免端口冲突或允许局域网访问）：
+
+```bash
+python tray.py --port 9999 --host 0.0.0.0
+# 或
+PORT=9999 HOST=0.0.0.0 python tray.py
+```
+
 要完整查看受保护进程，建议以管理员身份运行。PPL 进程（如 `System`、部分受保护的 `svchost.exe`）即便管理员权限也只能看到部分信息 —— 这是 Windows 的安全机制，不是 SPort 的限制。
 
 ## 键盘快捷键
@@ -109,9 +117,21 @@ python -m pip install -r requirements.txt
 build.bat
 ```
 
+`build.bat` 自动在以下位置查找 ISCC.exe（任一即可）：
+1. `INNO_SETUP` 环境变量
+2. PATH
+3. `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`
+4. `C:\Program Files\Inno Setup 6\ISCC.exe`
+5. `D:\develop\Inno Setup 6\ISCC.exe`
+6. `D:\tools\Inno Setup 6\ISCC.exe`
+
+要安装器界面包含中文（EN + 简中），从官方 Unofficial 包下载 `ChineseSimplified.isl` 放到 IS 的 `Languages\` 目录（GitHub Actions 已自动处理；本地首次构建时按提示操作）。
+
 产出：
 - `dist/SPort.exe` — 单文件可执行（~23 MB）
-- `dist/SPort-Setup-0.2.0.exe` — Windows 安装器（~12 MB）
+- `dist/SPort-Setup-0.2.0.exe` — Windows 安装器（~24 MB）
+
+CI 自动构建：push 到 main 触发验证，push tag `v*` 触发 GitHub Release 上传安装包。
 
 ## API
 

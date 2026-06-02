@@ -26,9 +26,35 @@ try:
 except ImportError:
     _HAS_TOAST = False
 
-PORT = int(os.environ.get("PORT", 7777))
-HOST = os.environ.get("HOST", "127.0.0.1")
-SILENT = "--silent" in sys.argv
+def _parse_args():
+    port = int(os.environ.get("PORT", 7777))
+    host = os.environ.get("HOST", "127.0.0.1")
+    silent = False
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--port" and i + 1 < len(args):
+            port = int(args[i + 1])
+            i += 2
+        elif a.startswith("--port="):
+            port = int(a.split("=", 1)[1])
+            i += 1
+        elif a == "--host" and i + 1 < len(args):
+            host = args[i + 1]
+            i += 2
+        elif a.startswith("--host="):
+            host = a.split("=", 1)[1]
+            i += 1
+        elif a == "--silent":
+            silent = True
+            i += 1
+        else:
+            i += 1
+    return host, port, silent
+
+
+HOST, PORT, SILENT = _parse_args()
 DASHBOARD_URL = f"http://{HOST}:{PORT}"
 
 

@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -54,3 +55,82 @@ jobs:
 
           print(f'OK: {s[\"summary\"][\"total\"]} ports, {len(sys_items)} system, {len(SYSTEM_PROCESSES)} known system procs')
           "
+
+  build:
+    name: Build Windows installer
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build SPort.exe
+        run: pyinstaller build.spec
+
+      - name: Install Inno Setup 6
+        run: choco install innosetup --version=6.7.3 -y --no-progress
+
+      - name: Install Chinese language file
+        shell: pwsh
+        run: |
+          $islPath = "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl"
+          if (-not (Test-Path $islPath)) {
+            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/refs/heads/main/Files/Languages/Unofficial/ChineseSimplified.isl" -OutFile $islPath -UseBasicParsing
+          }
+
+      - name: Build installer
+        shell: cmd
+        env:
+          INNO_SETUP: 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          CI: 'true'
+        run: build.bat
+
+      - name: Verify artifacts
+        shell: pwsh
+        run: |
+          $exe = "dist\SPort.exe"
+          $setup = "dist\SPort-Setup-0.2.0.exe"
+          if (-not (Test-Path $exe)) { throw "$exe not found" }
+          if (-not (Test-Path $setup)) { throw "$setup not found" }
+          $exeSize = [math]::Round((Get-Item $exe).Length / 1MB, 2)
+          $setupSize = [math]::Round((Get-Item $setup).Length / 1MB, 2)
+          Write-Host "SPort.exe:        $exeSize MB"
+          Write-Host "Installer:        $setupSize MB"
+          if ($setupSize -lt 10) { throw "Installer suspiciously small ($setupSize MB)" }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: sport-setup
+          path: dist/SPort-Setup-0.2.0.exe
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    runs-on: windows-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download installer
+        uses: actions/download-artifact@v4
+        with:
+          name: sport-setup
+          path: dist
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SPort v${{ github.ref_name }}
+          generate_release_notes: true
+          files: dist/SPort-Setup-0.2.0.exe

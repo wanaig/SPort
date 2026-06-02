@@ -16,19 +16,30 @@ echo.
 echo [SPort] Step 2/2: Inno Setup (build installer)
 echo.
 
-set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
-if not exist "%ISCC%" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
-if not exist "%ISCC%" (
-    echo [SPort] Inno Setup 6 not found.
-    echo [SPort]   Expected: %%ProgramFiles(x86)%%\Inno Setup 6\ISCC.exe
-    echo [SPort]   Download: https://jrsoftware.org/isdl.php
+set "ISCC="
+
+if defined INNO_SETUP if exist "%INNO_SETUP%" set "ISCC=%INNO_SETUP%"
+
+if not defined ISCC (
+    for /f "delims=" %%i in ('where ISCC.exe 2^>nul') do (
+        if not defined ISCC set "ISCC=%%i"
+    )
+)
+
+if not defined ISCC (
+    echo [SPort] ISCC.exe not found.
+    echo [SPort] Download Inno Setup 6: https://jrsoftware.org/isdl.php
+    echo [SPort] Then either:
+    echo [SPort]   1. Add ISCC.exe to PATH, or
+    echo [SPort]   2. Set INNO_SETUP env var, e.g.:
+    echo [SPort]        set INNO_SETUP=D:\develop\Inno Setup 6\ISCC.exe
     echo.
-    echo [SPort] PyInstaller build OK.
-    echo [SPort]   Executable only: dist\SPort.exe
+    echo [SPort] PyInstaller build OK: dist\SPort.exe
     echo [SPort] Run this script again after installing Inno Setup 6.
     exit /b 0
 )
 
+echo [SPort] Using ISCC: %ISCC%
 "%ISCC%" installer.iss
 if errorlevel 1 (
     echo.
@@ -41,4 +52,4 @@ echo [SPort] Build complete:
 echo [SPort]   Executable: dist\SPort.exe
 echo [SPort]   Installer:  dist\SPort-Setup-0.2.0.exe
 echo.
-pause
+if not "%CI%"=="true" pause
