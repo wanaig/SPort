@@ -11,6 +11,7 @@ import threading
 import webbrowser
 import atexit
 import urllib.request
+import json
 
 from app import app
 from singleinstance import SingleInstance
@@ -18,6 +19,12 @@ from autostart import is_enabled as autostart_is_enabled, set_enabled as autosta
 
 import pystray
 from PIL import Image, ImageDraw
+
+try:
+    from winotify import Notification, audio as toast_audio
+    _HAS_TOAST = True
+except ImportError:
+    _HAS_TOAST = False
 
 PORT = int(os.environ.get("PORT", 7777))
 HOST = os.environ.get("HOST", "127.0.0.1")
@@ -92,6 +99,14 @@ def toggle_autostart(icon, item):
 def toggle_notifications(icon, item):
     state["notifications"] = not state["notifications"]
     app.config["SPORT_NOTIFY"] = state["notifications"]
+    if state["notifications"]:
+        if _notification_thread is None or not _notification_thread.is_alive():
+            _notification_stop.clear()
+            t = threading.Thread(target=notification_loop, args=(_notification_stop,), daemon=True)
+            t.start()
+            _notification_thread = t
+    else:
+        _notification_stop.set()
     icon.update_menu()
 
 
@@ -115,6 +130,64 @@ def make_icon():
             fill=color,
         )
     return img
+
+
+_ICON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "sport.ico")
+
+
+def _ensure_icon_saved():
+    if os.path.exists(_ICON_PATH):
+        return _ICON_PATH
+    try:
+        os.makedirs(os.path.dirname(_ICON_PATH), exist_ok=True)
+        base = make_icon()
+        sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+        base.save(_ICON_PATH, format="ICO", sizes=sizes)
+        return _ICON_PATH
+    except Exception:
+        return None
+
+
+def show_toast(title, msg):
+    if not _HAS_TOAST:
+        return
+    try:
+        icon_path = _ensure_icon_saved()
+        toast = Notification(
+            app_id="SPort",
+            title=title,
+            msg=msg,
+            duration="short",
+            icon=icon_path or "",
+        )
+        toast.set_audio(toast_audio.Default, loop=False)
+        toast.show()
+    except Exception:
+        pass
+
+
+def notification_loop(stop_event):
+    prev_ports = {}
+    while not stop_event.is_set():
+        if not state["notifications"]:
+            stop_event.wait(2.0)
+            prev_ports = {}
+            continue
+        try:
+            req = urllib.request.urlopen(f"{DASHBOARD_URL}/api/ports", timeout=2)
+            data = json.loads(req.read())
+            current = {item["port"]: item.get("process", "?") for item in data["items"]}
+            for port, proc in current.items():
+                if port not in prev_ports:
+                    show_toast(f"端口 {port} 已打开", f"{proc} 正在监听")
+            prev_ports = current
+        except Exception:
+            pass
+        stop_event.wait(5.0)
+
+
+_notification_stop = threading.Event()
+_notification_thread = None
 
 
 def build_menu():

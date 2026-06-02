@@ -203,8 +203,22 @@ def _is_system_process(process_name, username):
     return False
 
 
+_last_scan_cache = {"data": None}
+
+
 def scan_ports():
-    """Scan all listening TCP/UDP ports with their owning process."""
+    """Scan all listening TCP/UDP ports with their owning process.
+
+    When app.config['SPORT_PAUSED'] is True, returns the most recent
+    successful scan (with summary.paused = True) instead of rescanning.
+    """
+    if app.config.get("SPORT_PAUSED", False) and _last_scan_cache["data"] is not None:
+        cached = _last_scan_cache["data"]
+        return {
+            **cached,
+            "summary": {**cached["summary"], "paused": True},
+        }
+
     results = []
     seen = set()
     try:
@@ -253,7 +267,7 @@ def scan_ports():
     duplicates = {pid: cnt for pid, cnt in by_pid.items() if cnt > 1}
     hidden_count = sum(1 for r in results if r["is_system"])
 
-    return {
+    result = {
         "items": results,
         "summary": {
             "total": len(results),
@@ -264,9 +278,12 @@ def scan_ports():
             "processes": len(set(r["pid"] for r in results if r["pid"])),
             "hidden": hidden_count,
             "scanned_at": datetime.now().isoformat(timespec="seconds"),
+            "paused": False,
         },
         "duplicates": duplicates,
     }
+    _last_scan_cache["data"] = result
+    return result
 
 
 @app.route("/")
