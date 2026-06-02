@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SPort — 实时端口监控</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>SPort</h1>
+          <span class="subtitle" data-i18n="brand.subtitle">实时端口监控</span>
+        </div>
+      </div>
+
+      <div class="stats" id="stats">
+        <div class="stat"><div class="stat-value" id="stat-total">—</div><div class="stat-label" data-i18n="stat.listening">监听中</div></div>
+        <div class="stat"><div class="stat-value tcp" id="stat-tcp">—</div><div class="stat-label">TCP</div></div>
+        <div class="stat"><div class="stat-value udp" id="stat-udp">—</div><div class="stat-label">UDP</div></div>
+        <div class="stat"><div class="stat-value" id="stat-procs">—</div><div class="stat-label" data-i18n="stat.processes">进程</div></div>
+        <div class="stat"><div class="stat-value warn" id="stat-dups">—</div><div class="stat-label" data-i18n="stat.multiport">多端口</div></div>
+        <div class="stat stat-clickable" id="stat-hidden-wrap" data-i18n-title="toolbar.settings" title="过滤设置">
+          <div class="stat-value mute" id="stat-hidden">0</div>
+          <div class="stat-label" data-i18n="stat.hidden">已隐藏</div>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="lang-switch" role="group" data-i18n-aria="lang.toggle">
+          <button class="lang-btn" data-lang="en" type="button">EN</button>
+          <button class="lang-btn" data-lang="zh" type="button">中</button>
+        </div>
+        <button class="icon-btn" id="btn-settings" type="button" data-i18n-title="toolbar.settings" title="过滤设置" data-i18n-aria="toolbar.settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+        <div class="live-indicator">
+          <span class="dot"></span>
+          <span class="live-text" data-i18n="live">实时</span>
+        </div>
+        <div class="last-scan" id="last-scan" data-i18n="scanning">扫描中…</div>
+      </div>
+    </header>
+
+    <section class="toolbar">
+      <div class="search-wrap">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="search" data-i18n-placeholder="search.placeholder" placeholder="搜索端口、进程名、PID 或地址…" autocomplete="off" spellcheck="false">
+        <kbd class="kbd">/</kbd>
+      </div>
+
+      <div class="filters">
+        <button class="chip active" data-filter="all" data-i18n="filter.all">全部</button>
+        <button class="chip" data-filter="tcp">TCP</button>
+        <button class="chip" data-filter="udp">UDP</button>
+        <button class="chip" data-filter="common" data-i18n="filter.common">常用端口</button>
+        <button class="chip" data-filter="duplicate" data-i18n="filter.duplicate">多端口</button>
+      </div>
+
+      <div class="toolbar-right">
+        <label class="autorefresh hide-system-toggle">
+          <input type="checkbox" id="hide-system">
+          <span data-i18n="toolbar.hideSystem">隐藏系统端口</span>
+        </label>
+        <label class="autorefresh">
+          <input type="checkbox" id="autorefresh" checked>
+          <span data-i18n="toolbar.autorefresh">自动刷新</span>
+        </label>
+        <select id="interval" class="select" data-i18n-aria="toolbar.refresh">
+          <option value="1000">1s</option>
+          <option value="2000" selected>2s</option>
+          <option value="5000">5s</option>
+          <option value="10000">10s</option>
+        </select>
+        <button class="btn btn-ghost" id="btn-refresh" type="button" data-i18n-title="toolbar.refresh" title="刷新">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          <span data-i18n="toolbar.refresh">刷新</span>
+        </button>
+      </div>
+    </section>
+
+    <main class="content">
+      <div class="table-wrap">
+        <table class="grid" id="grid">
+          <thead>
+            <tr>
+              <th class="col-port" data-sort="port"><span data-i18n="col.port">端口</span> <span class="sort-ind"></span></th>
+              <th class="col-proto" data-sort="protocol"><span data-i18n="col.protocol">协议</span> <span class="sort-ind"></span></th>
+              <th class="col-addr" data-sort="address"><span data-i18n="col.address">地址</span> <span class="sort-ind"></span></th>
+              <th class="col-pid" data-sort="pid">PID <span class="sort-ind"></span></th>
+              <th class="col-proc" data-sort="process"><span data-i18n="col.process">进程</span> <span class="sort-ind"></span></th>
+              <th class="col-user"><span data-i18n="col.user">用户</span></th>
+              <th class="col-tag"><span data-i18n="col.tag">标签</span></th>
+              <th class="col-act"><span data-i18n="col.action">操作</span></th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="8" class="empty" data-i18n="empty.loading">加载端口中…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <span data-i18n="footer.hint">按 / 搜索 · R 刷新 · Esc 清除</span>
+      <span class="footer-right" data-i18n="footer.tagline">SPort · 本地运行 · 数据不离开本机</span>
+    </footer>
+  </div>
+
+  <div class="modal" id="detail-modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 data-i18n="detail.title">进程详情</h2>
+        <button class="modal-close" id="modal-close" type="button" data-i18n-aria="modal.close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="detail-body"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="settings-modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-panel modal-panel-wide">
+      <div class="modal-header">
+        <h2 data-i18n="settings.title">过滤设置</h2>
+        <button class="modal-close" id="settings-close" type="button" data-i18n-aria="modal.close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="settings-body">
+        <section class="settings-section">
+          <h3 class="settings-h3" data-i18n="settings.builtinLabel">内置系统进程</h3>
+          <div class="settings-chips" id="builtin-list"></div>
+        </section>
+        <section class="settings-section">
+          <h3 class="settings-h3" data-i18n="settings.customLabel">自定义添加</h3>
+          <div class="settings-add-row">
+            <input type="text" id="custom-input" class="settings-input" data-i18n-placeholder="settings.addPlaceholder" placeholder="添加进程名 (如 myapp.exe)" autocomplete="off" spellcheck="false">
+            <button id="custom-add" class="btn" type="button" data-i18n="settings.add">添加</button>
+          </div>
+          <div class="settings-chips" id="custom-list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-wrap" id="toast-wrap"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
