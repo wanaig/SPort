@@ -24,17 +24,19 @@
 
 下载适合你系统的版本，双击运行。
 
-| 形式 | 体积 | 说明 |
-| --- | --- | --- |
-| **SPort-Setup-x.x.x.exe**（推荐） | ~12 MB | 标准 Windows 安装器，可从"应用和功能"卸载；安装到 `%LOCALAPPDATA%\SPort\`；可选桌面快捷方式、开机自启 |
-| **SPort.exe**（便携） | ~23 MB | 单文件，丢到任意目录双击即可；无注册表项、无卸载入口 |
+| 平台 | 形式 | 体积 | 说明 |
+| --- | --- | --- | --- |
+| **Windows** | **SPort-Setup-x.x.x.exe**（推荐） | ~24 MB | 标准 Windows 安装器，可从"应用和功能"卸载；安装到 `%LOCALAPPDATA%\SPort\`；可选桌面快捷方式、开机自启 |
+| **Windows** | **SPort.exe**（便携） | ~23 MB | 单文件，丢到任意目录双击即可；无注册表项、无卸载入口 |
+| **macOS** | **SPort-macOS.dmg** | ~40 MB | 打开 DMG，拖 `SPort.app` 到 Applications 文件夹；首次运行右键 → 打开（绕过 Gatekeeper） |
+| **Linux** | **SPort-Linux-x86_64.tar.gz** | ~25 MB | 解压后 `./SPort` 即可运行；需要 `libnotify`（`sudo apt install libnotify-dev`） |
 
 从 [Releases](https://github.com/wanaig/SPort/releases) 下载。
 
-**首次运行**：Windows SmartScreen 会弹"Windows protected your PC"。点 **更多信息** → **仍要运行** 即可（项目未做代码签名）。
+**首次运行**：Windows SmartScreen 会弹"Windows protected your PC"。点 **更多信息** → **仍要运行** 即可（项目未做代码签名）。macOS 用户首次打开需右键 → 打开。
 
 **首次启动行为**：
-- 任务栏右下角出现 SPort 图标
+- 任务栏右下角出现 SPort 图标（macOS 为菜单栏图标，Linux 为系统托盘图标）
 - 默认浏览器自动打开 <http://127.0.0.1:7777>（安装版可在安装时取消勾选"启动 SPort"避免自动开浏览器）
 - 右键托盘图标：打开面板 / 暂停 / 开机自启 / 端口通知 / 退出
 
@@ -103,11 +105,10 @@ PORT=9999 HOST=0.0.0.0 python tray.py
 | 桌面通知 | ✅（winotify） | ✅（plyer/osascript） | ✅（plyer/libnotify） |
 | 开机自启 | ✅ 注册表 | ✅ LaunchAgent | ✅ XDG autostart |
 | 受保护进程（PPL）信息 | ✅ Toolhelp + OpenProcess | ❌ 不需要 | ❌ 不需要 |
-| 预编译安装包 | ✅ exe + 安装器 | ❌ 未实现 | ❌ 未实现 |
+| 预编译安装包 | ✅ exe + 安装器 | ✅ dmg | ✅ tar.gz |
 
 ## 限制
 
-- **macOS / Linux**：暂无预编译安装包，需从源码运行
 - **macOS / Linux**：`sudo` 可查看其他用户的进程信息（`psutil` 在非 root 下只能看到自己的进程）
 - **Windows**：PPL 进程（`System`、`MsMpEng.exe` 等）即便管理员也只能看到部分信息
 - **Windows SmartScreen**：未签名 exe 首次运行需手动放行
@@ -205,17 +206,19 @@ When you run a dozen microservices locally, port conflicts (`EADDRINUSE`) are co
 
 Download a prebuilt release, or run from source.
 
-| Distribution | Size | Notes |
-| --- | --- | --- |
-| **SPort-Setup-x.x.x.exe** (recommended) | ~12 MB | Standard Windows installer; uninstallable via Settings → Apps; installs to `%LOCALAPPDATA%\SPort\`; optional desktop shortcut and autostart |
-| **SPort.exe** (portable) | ~23 MB | Single file, drop anywhere and run; no registry entries, no uninstaller |
+| Platform | Distribution | Size | Notes |
+| --- | --- | --- | --- |
+| **Windows** | **SPort-Setup-x.x.x.exe** (recommended) | ~24 MB | Standard Windows installer; uninstallable via Settings → Apps; installs to `%LOCALAPPDATA%\SPort\`; optional desktop shortcut and autostart |
+| **Windows** | **SPort.exe** (portable) | ~23 MB | Single file, drop anywhere and run; no registry entries, no uninstaller |
+| **macOS** | **SPort-macOS.dmg** | ~40 MB | Open DMG, drag `SPort.app` to Applications; right-click → Open on first launch (Gatekeeper bypass) |
+| **Linux** | **SPort-Linux-x86_64.tar.gz** | ~25 MB | Extract and run `./SPort`; needs `libnotify` (`sudo apt install libnotify-dev`) |
 
 Download from [Releases](https://github.com/wanaig/SPort/releases).
 
-**First run**: Windows SmartScreen may show "Windows protected your PC". Click **More info** → **Run anyway** (the project is not code-signed).
+**First run**: Windows SmartScreen may show "Windows protected your PC". Click **More info** → **Run anyway** (the project is not code-signed). macOS users: right-click → Open on first launch.
 
 **After launch**:
-- SPort icon appears in the system tray
+- SPort icon appears in the system tray (macOS: menu bar, Linux: system tray)
 - Default browser opens <http://127.0.0.1:7777>
 - Right-click the tray icon: open dashboard, pause, autostart, port notifications, quit
 
@@ -274,11 +277,10 @@ For full visibility into protected processes, run as Administrator on Windows or
 | Desktop notifications | ✅ (winotify) | ✅ (plyer/osascript) | ✅ (plyer/libnotify) |
 | Autostart on login | ✅ Registry | ✅ LaunchAgent | ✅ XDG autostart |
 | Protected process (PPL) info | ✅ Toolhelp + OpenProcess | ❌ not needed | ❌ not needed |
-| Prebuilt installer | ✅ exe + setup | ❌ not yet | ❌ not yet |
+| Prebuilt installer | ✅ exe + setup | ✅ dmg | ✅ tar.gz |
 
 ## Limitations
 
-- **macOS / Linux**: no prebuilt binaries — run from source
 - **macOS / Linux**: `sudo` may be needed to see other users' processes (`psutil` without root only shows your own)
 - **Windows**: PPL processes (`System`, `MsMpEng.exe`, etc.) show partial info even as Administrator
 - **Windows SmartScreen**: unsigned exe requires manual approval on first run
