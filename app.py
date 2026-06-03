@@ -1,10 +1,7 @@
-"""SPort - Real-time port monitor for microservice developers."""
+"""SPort — Real-time port monitor for microservice developers."""
 import os
 import sys
-import time
-import ctypes
 import socket
-from ctypes import wintypes
 from datetime import datetime
 from flask import Flask, jsonify, request, render_template
 
@@ -14,12 +11,11 @@ except ImportError:
     print("Missing dependency 'psutil'. Run: pip install -r requirements.txt")
     sys.exit(1)
 
-IS_WINDOWS = sys.platform == "win32"
-if IS_WINDOWS:
-    try:
-        _kernel32 = ctypes.windll.kernel32
-    except Exception:
-        IS_WINDOWS = False
+from platforms import (
+    IS_WINDOWS,
+    get_system_registry,
+    get_protected_process_info,
+)
 
 app = Flask(__name__)
 
@@ -38,121 +34,15 @@ KILL_BLOCKLIST = {
     1784, 1824, 1852, 1888, 1900, 1932, 1960, 1984, 2000, 2024,
 }
 
-# Built-in Windows system processes (matched case-insensitive, .exe suffix ignored)
-SYSTEM_PROCESSES = {
-    "System", "[System Process]", "Secure System", "Registry",
-    # Core
-    "smss.exe", "csrss.exe", "wininit.exe", "winlogon.exe",
-    "services.exe", "lsass.exe", "lsaiso.exe", "lsm.exe",
-    "userinit.exe", "LogonUI.exe",
-    # Service hosts and broker
-    "svchost.exe", "WmiPrvSE.exe", "WmiApSrv.exe", "taskhostw.exe",
-    "taskhostex.exe", "RuntimeBroker.exe", "dllhost.exe",
-    "audiodg.exe", "fontdrvhost.exe", "conhost.exe", "dashost.exe",
-    # Search / shell / UI
-    "SearchHost.exe", "SearchIndexer.exe", "SearchProtocolHost.exe",
-    "SearchFilterHost.exe", "ShellExperienceHost.exe",
-    "StartMenuExperienceHost.exe", "TextInputHost.exe", "LockApp.exe",
-    "smartscreen.exe",
-    # Drivers / kernel helpers
-    "WerFault.exe", "WerFaultSecure.exe", "WUDFHost.exe", "WUDFPlatform.exe",
-    # Security
-    "SecurityHealthService.exe", "MsMpEng.exe", "NisSrv.exe",
-    "MpCmdRun.exe",
-    # Printing / networking
-    "spoolsv.exe", "ismserv.exe", "efssvc.exe", "esifsvc.exe",
-    # OEM/vendor bloat (commonly safe to hide)
-    "IntelAudioService.exe", "NahimicService.exe", "NahimicSvc.exe",
-    "RtkAudUService64.exe", "RazerCentralService.exe",
-}
-
-SYSTEM_USERS = {
-    "NT AUTHORITY\\SYSTEM",
-    "NT AUTHORITY\\LOCAL SERVICE",
-    "NT AUTHORITY\\NETWORK SERVICE",
-    "SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE",
-}
-
-# Toolhelp snapshot cache for protected process names
-_TOOLHELP_CACHE = {"data": {}, "ts": 0.0}
-_TOOLHELP_TTL = 15.0
-
-
-# =====================================================================
-# Windows API helpers for protected processes (PPL/AntiMalware)
-# =====================================================================
-def _build_pe32w():
-    class PROCESSENTRY32W(ctypes.Structure):
-        _fields_ = [
-            ("dwSize", wintypes.DWORD),
-            ("cntUsage", wintypes.DWORD),
-            ("th32ProcessID", wintypes.DWORD),
-            ("th32DefaultHeapID", ctypes.POINTER(wintypes.ULONG)),
-            ("th32ModuleID", wintypes.DWORD),
-            ("cntThreads", wintypes.DWORD),
-            ("th32ParentProcessID", wintypes.DWORD),
-            ("pcPriClassBase", ctypes.c_long),
-            ("dwFlags", wintypes.DWORD),
-            ("szExeFile", ctypes.c_wchar * 260),
-        ]
-    return PROCESSENTRY32W
-
-
-def _refresh_toolhelp():
-    """Snapshot of {pid: process_name} using Toolhelp32. Works for PPL/AntiMalware."""
-    now = time.time()
-    if _TOOLHELP_CACHE["data"] and (now - _TOOLHELP_CACHE["ts"]) < _TOOLHELP_TTL:
-        return _TOOLHELP_CACHE["data"]
-
-    data = {}
-    if IS_WINDOWS:
-        try:
-            TH32CS_SNAPPROCESS = 0x00000002
-            PE32W = _build_pe32w()
-            snapshot = _kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-            if snapshot and snapshot != -1:
-                try:
-                    entry = PE32W()
-                    entry.dwSize = ctypes.sizeof(entry)
-                    if _kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
-                        while True:
-                            data[entry.th32ProcessID] = entry.szExeFile
-                            if not _kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
-                                break
-                finally:
-                    _kernel32.CloseHandle(snapshot)
-        except Exception:
-            pass
-
-    _TOOLHELP_CACHE["data"] = data
-    _TOOLHELP_CACHE["ts"] = now
-    return data
-
-
-def _get_exe_limited(pid):
-    """Get full exe path with PROCESS_QUERY_LIMITED_INFORMATION. Works for some PPL."""
-    if not IS_WINDOWS or not pid:
-        return None
-    try:
-        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-        handle = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-        if not handle:
-            return None
-        try:
-            buf = ctypes.create_unicode_buffer(1024)
-            size = wintypes.DWORD(1024)
-            if _kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
-                return buf.value
-        finally:
-            _kernel32.CloseHandle(handle)
-    except Exception:
-        return None
+# System process / account registry is per-platform — see platforms/.
+_system_registry = get_system_registry()
 
 
 def get_process_info(pid):
     """Get process info with multi-level fallback:
+
     1. psutil (full info)
-    2. Toolhelp snapshot (name only, works for PPL)
+    2. Windows PPL fallback via Toolhelp32 + OpenProcess (LIMITED)
     3. Empty fallback
     """
     if not pid:
@@ -171,34 +61,17 @@ def get_process_info(pid):
     except (psutil.NoSuchProcess, psutil.ZombieProcess):
         return {"name": f"(pid {pid})", "exe": "", "username": "?", "partial": False}
     except psutil.AccessDenied:
-        name = _refresh_toolhelp().get(pid)
-        exe = _get_exe_limited(pid) or ""
-        return {
-            "name": name or f"(pid {pid})",
-            "exe": exe,
-            "username": "?",
-            "create_time": 0,
-            "partial": True,
-        }
+        protected = get_protected_process_info(pid) if IS_WINDOWS else None
+        if protected:
+            return protected
+        return {"name": f"(pid {pid})", "exe": "", "username": "?", "partial": False}
 
 
 def _is_system_process(process_name, username):
-    """Decide if a row represents a Windows system service.
-    Matches against the built-in process name set and well-known system accounts.
-    """
-    if not process_name:
-        return False
-    proc_lc = process_name.lower()
-    if proc_lc in SYSTEM_PROCESSES:
+    """Decide if a row represents a platform system service."""
+    if process_name and _system_registry.is_system_process(process_name):
         return True
-    # Strip .exe for matching
-    base = proc_lc[:-4] if proc_lc.endswith(".exe") else proc_lc
-    for sp in SYSTEM_PROCESSES:
-        sp_lc = sp.lower()
-        sp_base = sp_lc[:-4] if sp_lc.endswith(".exe") else sp_lc
-        if base == sp_base:
-            return True
-    if username and username.upper() in {u.upper() for u in SYSTEM_USERS}:
+    if username and _system_registry.is_system_user(username):
         return True
     return False
 
@@ -299,8 +172,8 @@ def api_ports():
 @app.route("/api/system-processes")
 def api_system_processes():
     return jsonify({
-        "builtin": sorted(SYSTEM_PROCESSES),
-        "users": sorted(SYSTEM_USERS),
+        "builtin": _system_registry.processes,
+        "users": _system_registry.users,
     })
 
 
@@ -355,21 +228,20 @@ def api_process(pid):
     except psutil.NoSuchProcess:
         return jsonify({"error": "not found", "message": "Process no longer exists"}), 404
     except psutil.AccessDenied:
-        name = _refresh_toolhelp().get(pid)
-        exe = _get_exe_limited(pid)
-        if not name and not exe:
+        protected = get_protected_process_info(pid) if IS_WINDOWS else None
+        if not protected:
             return jsonify({
                 "error": "access denied",
-                "message": "Kernel-protected process; no details available.",
+                "message": "Cannot read this process (try run as Administrator / sudo).",
             }), 403
         return jsonify({
             "pid": pid,
-            "name": name or f"(pid {pid})",
-            "exe": exe or "",
+            "name": protected.get("name") or f"(pid {pid})",
+            "exe": protected.get("exe") or "",
             "cmdline": [],
             "cwd": "",
-            "username": "",
-            "create_time": 0,
+            "username": protected.get("username") or "",
+            "create_time": protected.get("create_time") or 0,
             "status": "protected",
             "memory_mb": 0,
             "cpu_percent": 0,

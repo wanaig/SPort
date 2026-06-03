@@ -13,14 +13,20 @@ datas = [
     ('assets', 'assets'),
 ]
 
+# platform-specific hidden imports — PyInstaller doesn't always see these
+# through the platforms.* abstraction
 hiddenimports = [
-    'win32event',
-    'win32pipe',
-    'win32file',
+    # Windows
+    'winreg',
+    'pywintypes',
     'win32api',
-    'winerror',
-    'winotify',
-    'winotify.audio',
+    # plyer (cross-platform notifications) — pull in all backends so the
+    # right one is available regardless of host OS
+    'plyer',
+    'plyer.platforms',
+    'plyer.platforms.win',
+    'plyer.platforms.macosx',
+    'plyer.platforms.linux',
 ]
 
 a = Analysis(
@@ -62,5 +68,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/sport.ico',
+    icon='assets/sport.png',
 )

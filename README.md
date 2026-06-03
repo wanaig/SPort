@@ -53,6 +53,8 @@ python tray.py          # 带托盘；或 python app.py 只跑 Flask
 
 随后访问 <http://127.0.0.1:7777>。
 
+> **macOS / Linux 开发者**：`pip install` 会自动安装 `plyer`（跨平台通知）和 `pystray`（系统托盘）。macOS 需要 Xcode Command Line Tools；Linux 需要 `libnotify`（`sudo apt install libnotify-dev`）和一个通知守护进程（大多数桌面环境已自带）。`pywin32` 仅 Windows 安装，其它平台自动跳过。
+
 要换端口 / 监听地址（避免端口冲突或允许局域网访问）：
 
 ```bash
@@ -76,8 +78,11 @@ PORT=9999 HOST=0.0.0.0 python tray.py
 
 - `psutil.net_connections('inet')` — socket 与 PID 映射
 - `psutil.Process(pid)` — 内存、CPU、所有者、命令行
-- `CreateToolhelp32Snapshot`（Windows Toolhelp API）— psutil 访问被拒时获取进程名
-- `OpenProcess` + `PROCESS_QUERY_LIMITED_INFORMATION` — 受保护进程的可执行文件路径
+- **Windows**：`CreateToolhelp32Snapshot` + `OpenProcess` 获取受保护进程（PPL）信息
+- **macOS / Linux**：`psutil` 覆盖所有可见进程，无需额外 API
+- 单实例锁：跨平台 TCP localhost 端口（`127.0.0.1:17777`），不依赖系统互斥体
+- 自动启动：Windows 注册表 / macOS LaunchAgent / Linux XDG `.desktop`
+- 桌面通知：Windows `winotify` / macOS、Linux `plyer`
 - 前端为原生 HTML + CSS + JS，无构建步骤，无框架
 
 ## 技术栈
@@ -85,7 +90,27 @@ PORT=9999 HOST=0.0.0.0 python tray.py
 - Python 3.10+
 - Flask（HTTP 服务 + 静态文件）
 - psutil（系统内省）
-- pywin32（Windows API，受保护进程信息）
+- pystray + Pillow（系统托盘图标）
+- plyer（跨平台桌面通知）
+- pywin32（仅 Windows，受保护进程信息）
+
+## 平台支持
+
+| 功能 | Windows | macOS | Linux |
+| --- | --- | --- | --- |
+| 端口扫描 + 进程信息 | ✅ | ✅ | ✅ |
+| 系统托盘图标 | ✅ | ✅ | ✅ |
+| 桌面通知 | ✅（winotify） | ✅（plyer/osascript） | ✅（plyer/libnotify） |
+| 开机自启 | ✅ 注册表 | ✅ LaunchAgent | ✅ XDG autostart |
+| 受保护进程（PPL）信息 | ✅ Toolhelp + OpenProcess | ❌ 不需要 | ❌ 不需要 |
+| 预编译安装包 | ✅ exe + 安装器 | ❌ 未实现 | ❌ 未实现 |
+
+## 限制
+
+- **macOS / Linux**：暂无预编译安装包，需从源码运行
+- **macOS / Linux**：`sudo` 可查看其他用户的进程信息（`psutil` 在非 root 下只能看到自己的进程）
+- **Windows**：PPL 进程（`System`、`MsMpEng.exe` 等）即便管理员也只能看到部分信息
+- **Windows SmartScreen**：未签名 exe 首次运行需手动放行
 
 ## 项目结构
 
@@ -93,13 +118,17 @@ PORT=9999 HOST=0.0.0.0 python tray.py
 SPort/
 ├── app.py                  Flask 后端，扫描、终止、详情 API
 ├── tray.py                 托盘入口（pystray、菜单、单实例协调）
-├── singleinstance.py       Windows 命名互斥体 + 命名管道
-├── autostart.py            注册表 Run 项读写
+├── platforms/              跨平台适配层
+│   ├── __init__.py         平台选择 + 工厂函数
+│   ├── _common.py          基类（Autostart、Notifier、SingleInstance、SystemProcessRegistry）
+│   ├── windows.py          注册表自启、winotify 通知、Toolhelp PPL 回退
+│   ├── darwin.py           LaunchAgent 自启、plyer 通知、macOS 系统进程列表
+│   └── linux.py            XDG autostart、plyer 通知、Linux 系统进程列表
 ├── build.spec              PyInstaller 打包配置
 ├── installer.iss           Inno Setup 安装脚本
 ├── build.bat               一键构建：PyInstaller + Inno Setup
 ├── assets/
-│   └── sport.ico           多尺寸应用图标
+│   └── sport.png           应用图标（256×256）
 ├── requirements.txt
 ├── start.bat               Windows 一键启动（开发用）
 ├── templates/
@@ -132,6 +161,8 @@ build.bat
 - `dist/SPort-Setup-0.2.0.exe` — Windows 安装器（~24 MB）
 
 CI 自动构建：push 到 main 触发验证，push tag `v*` 触发 GitHub Release 上传安装包。
+
+> **macOS / Linux**：暂无自动化构建脚本。从源码运行即可（`python tray.py`）。欢迎贡献 `Makefile` 或平台打包脚本。
 
 ## API
 
@@ -201,7 +232,9 @@ python tray.py          # tray + Flask; or python app.py for Flask only
 
 Then open <http://127.0.0.1:7777>.
 
-For full visibility into protected processes, run as Administrator. PPL processes (e.g. `System`, `svchost.exe` under certain protections) may show partial info even with admin rights — that is a Windows security feature, not an app limitation.
+> **macOS / Linux developers**: `pip install` pulls in `plyer` (cross-platform notifications) and `pystray` (system tray). macOS requires Xcode Command Line Tools; Linux needs `libnotify` (`sudo apt install libnotify-dev`) and a notification daemon (most desktop environments include one). `pywin32` is Windows-only and skipped automatically on other platforms.
+
+For full visibility into protected processes, run as Administrator on Windows or `sudo` on Linux. PPL processes (e.g. `System`, `svchost.exe` under certain protections) may show partial info even with admin rights — that is a Windows security feature, not an app limitation.
 
 ## Keyboard shortcuts
 
@@ -216,8 +249,11 @@ For full visibility into protected processes, run as Administrator. PPL processe
 
 - `psutil.net_connections('inet')` for socket-to-PID mapping
 - `psutil.Process(pid)` for memory, CPU, owner, command line
-- `CreateToolhelp32Snapshot` (Windows Toolhelp API) for process names when psutil access is denied
-- `OpenProcess` with `PROCESS_QUERY_LIMITED_INFORMATION` for executable paths of protected processes
+- **Windows**: `CreateToolhelp32Snapshot` + `OpenProcess` for protected (PPL) process info
+- **macOS / Linux**: `psutil` covers all visible processes — no extra API needed
+- Single-instance lock: cross-platform TCP localhost socket (`127.0.0.1:17777`), no OS mutex
+- Autostart: Windows registry / macOS LaunchAgent / Linux XDG `.desktop`
+- Desktop notifications: Windows `winotify`; macOS & Linux `plyer`
 - Frontend is vanilla HTML + CSS + JS, no build step, no framework
 
 ## Tech stack
@@ -225,7 +261,27 @@ For full visibility into protected processes, run as Administrator. PPL processe
 - Python 3.10+
 - Flask (HTTP server + static files)
 - psutil (system introspection)
-- pywin32 (Windows API for protected process info)
+- pystray + Pillow (system tray icon)
+- plyer (cross-platform desktop notifications)
+- pywin32 (Windows-only, for protected process info)
+
+## Platform support
+
+| Feature | Windows | macOS | Linux |
+| --- | --- | --- | --- |
+| Port scan + process info | ✅ | ✅ | ✅ |
+| System tray icon | ✅ | ✅ | ✅ |
+| Desktop notifications | ✅ (winotify) | ✅ (plyer/osascript) | ✅ (plyer/libnotify) |
+| Autostart on login | ✅ Registry | ✅ LaunchAgent | ✅ XDG autostart |
+| Protected process (PPL) info | ✅ Toolhelp + OpenProcess | ❌ not needed | ❌ not needed |
+| Prebuilt installer | ✅ exe + setup | ❌ not yet | ❌ not yet |
+
+## Limitations
+
+- **macOS / Linux**: no prebuilt binaries — run from source
+- **macOS / Linux**: `sudo` may be needed to see other users' processes (`psutil` without root only shows your own)
+- **Windows**: PPL processes (`System`, `MsMpEng.exe`, etc.) show partial info even as Administrator
+- **Windows SmartScreen**: unsigned exe requires manual approval on first run
 
 ## Project layout
 
@@ -233,13 +289,17 @@ For full visibility into protected processes, run as Administrator. PPL processe
 SPort/
 ├── app.py                  Flask backend, scan, kill, detail APIs
 ├── tray.py                 Tray entry (pystray, menu, single-instance)
-├── singleinstance.py       Windows named mutex + named pipe
-├── autostart.py            Registry Run key read/write
+├── platforms/              Cross-platform adapter layer
+│   ├── __init__.py         Platform selection + factory functions
+│   ├── _common.py          Base classes (Autostart, Notifier, SingleInstance, SystemProcessRegistry)
+│   ├── windows.py          Registry autostart, winotify, Toolhelp PPL fallback
+│   ├── darwin.py           LaunchAgent autostart, plyer, macOS system process list
+│   └── linux.py            XDG autostart, plyer, Linux system process list
 ├── build.spec              PyInstaller config
 ├── installer.iss           Inno Setup script
 ├── build.bat               One-shot build: PyInstaller + Inno Setup
 ├── assets/
-│   └── sport.ico           Multi-resolution app icon
+│   └── sport.png           App icon (256×256)
 ├── requirements.txt
 ├── start.bat               Windows one-click launcher (dev)
 ├── templates/
@@ -260,6 +320,8 @@ build.bat
 Outputs:
 - `dist/SPort.exe` — single-file executable (~23 MB)
 - `dist/SPort-Setup-0.2.0.exe` — Windows installer (~12 MB)
+
+> **macOS / Linux**: no automated build scripts yet. Run from source (`python tray.py`). Contributions for a `Makefile` or platform packaging are welcome.
 
 ## API
 

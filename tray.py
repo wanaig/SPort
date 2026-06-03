@@ -1,8 +1,9 @@
-"""SPort tray entry point.
+"""SPort tray entry point — starts Flask in a background thread and shows a
+pystray icon for control. All cross-platform concerns (single-instance lock,
+autostart, notifications) are handled by the :mod:`platforms` package.
 
-Starts Flask in a background thread and shows a pystray icon for control.
-Single-instance: a second launch forwards a 'show' command to the running one
-and exits.
+Second-instance behavior: a second launch detects the running instance via
+the platform lock, forwards a ``show`` command to it, and exits.
 """
 import os
 import sys
@@ -14,17 +15,15 @@ import urllib.request
 import json
 
 from app import app
-from singleinstance import SingleInstance
-from autostart import is_enabled as autostart_is_enabled, set_enabled as autostart_set_enabled
+from platforms import (
+    get_autostart,
+    get_singleinstance,
+    get_notifier,
+)
 
 import pystray
 from PIL import Image, ImageDraw
 
-try:
-    from winotify import Notification, audio as toast_audio
-    _HAS_TOAST = True
-except ImportError:
-    _HAS_TOAST = False
 
 def _parse_args():
     port = int(os.environ.get("PORT", 7777))
@@ -67,7 +66,9 @@ def bundle_root():
 app.template_folder = os.path.join(bundle_root(), "templates")
 app.static_folder = os.path.join(bundle_root(), "static")
 
-_instance = SingleInstance("SPort")
+# Single-instance: lock port mirrors dashboard port to avoid collisions
+# (e.g. dashboard 7777 -> lock 17777, dashboard 9999 -> lock 19999).
+_instance = get_singleinstance(name="SPort", lock_port=PORT + 10000)
 atexit.register(_instance.release)
 
 if not _instance.is_first:
@@ -79,6 +80,9 @@ state = {
     "paused": False,
     "notifications": False,
 }
+
+_autostart = get_autostart()
+_notifier = get_notifier()
 
 
 def run_server():
@@ -127,8 +131,8 @@ def toggle_pause(icon, item):
 
 
 def toggle_autostart(icon, item):
-    new = not autostart_is_enabled()
-    autostart_set_enabled(new)
+    new = not _autostart.is_enabled()
+    _autostart.set_enabled(new)
     icon.update_menu()
 
 
@@ -168,7 +172,10 @@ def make_icon():
     return img
 
 
-_ICON_PATH = os.path.join(bundle_root(), "assets", "sport.ico")
+# Master PNG icon — used for both the tray (via PIL) and desktop notifications
+# (via file path). pystray consumes the PIL image directly; plyer/winotify
+# accept the PNG path. A single 256×256 RGBA file works on all platforms.
+_ICON_PATH = os.path.join(bundle_root(), "assets", "sport.png")
 
 
 def _ensure_icon_saved():
@@ -178,30 +185,16 @@ def _ensure_icon_saved():
         return None
     try:
         os.makedirs(os.path.dirname(_ICON_PATH), exist_ok=True)
-        base = make_icon()
-        sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
-        base.save(_ICON_PATH, format="ICO", sizes=sizes)
+        # Render at 256x256 for notifications; tray uses the PIL image directly.
+        base = make_icon().resize((256, 256), Image.LANCZOS)
+        base.save(_ICON_PATH, format="PNG")
         return _ICON_PATH
     except Exception:
         return None
 
 
 def show_toast(title, msg):
-    if not _HAS_TOAST:
-        return
-    try:
-        icon_path = _ensure_icon_saved()
-        toast = Notification(
-            app_id="SPort",
-            title=title,
-            msg=msg,
-            duration="short",
-            icon=icon_path or "",
-        )
-        toast.set_audio(toast_audio.Default, loop=False)
-        toast.show()
-    except Exception:
-        pass
+    _notifier.notify(title, msg, icon_path=_ensure_icon_saved() or "")
 
 
 def notification_loop(stop_event):
@@ -240,7 +233,7 @@ def build_menu():
         pystray.MenuItem(
             "开机自启",
             toggle_autostart,
-            checked=lambda item: autostart_is_enabled(),
+            checked=lambda item: _autostart.is_enabled(),
         ),
         pystray.MenuItem(
             "端口变化通知",
@@ -260,25 +253,33 @@ def on_ipc_command(command):
         os._exit(0)
 
 
-_instance.start_server(on_ipc_command)
+def main():
+    """Start the IPC server, the tray icon, and the Flask app in the
+    background. Blocks until the tray icon exits.
+    """
+    _instance.start_server(on_ipc_command)
 
-icon_image = make_icon()
-icon = pystray.Icon(
-    "SPort",
-    icon_image,
-    "SPort — 实时端口监控",
-    build_menu(),
-)
+    icon_image = make_icon()
+    icon = pystray.Icon(
+        "SPort",
+        icon_image,
+        "SPort — 实时端口监控",
+        build_menu(),
+    )
 
-if not SILENT:
-    threading.Timer(1.0, open_dashboard).start()
+    if not SILENT:
+        threading.Timer(1.0, open_dashboard).start()
 
-print(f"  SPort running. Dashboard: {DASHBOARD_URL}")
-print(f"  Right-click tray icon for menu.")
+    print(f"  SPort running. Dashboard: {DASHBOARD_URL}")
+    print(f"  Right-click tray icon for menu.")
 
-try:
-    icon.run()
-except KeyboardInterrupt:
-    pass
-finally:
-    _instance.release()
+    try:
+        icon.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        _instance.release()
+
+
+if __name__ == "__main__":
+    main()
