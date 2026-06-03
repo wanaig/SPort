@@ -108,8 +108,8 @@ if is_macos:
         info_plist={
             'CFBundleName': 'SPort',
             'CFBundleDisplayName': 'SPort',
-            'CFBundleVersion': '0.2.0',
-            'CFBundleShortVersionString': '0.2.0',
+            'CFBundleVersion': '0.3.0',
+            'CFBundleShortVersionString': '0.3.0',
             'LSBackgroundOnly': False,
             'NSHighResolutionCapable': True,
         },

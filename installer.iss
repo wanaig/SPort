@@ -3,7 +3,7 @@
 ; Requires: PyInstaller has already produced dist\SPort.exe
 
 #define MyAppName "SPort"
-#define MyAppVersion "0.2.0"
+#define MyAppVersion "0.3.0"
 #define MyAppPublisher "wanaig"
 #define MyAppURL "https://github.com/wanaig/SPort"
 #define MyAppExeName "SPort.exe"
