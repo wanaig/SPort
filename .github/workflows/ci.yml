@@ -27,19 +27,27 @@ jobs:
           pip install -r requirements.txt
 
       - name: Syntax check
-        run: python -m py_compile app.py
+        run: |
+          python -m py_compile app.py
+          python -m py_compile tray.py
+          python -m py_compile platforms/__init__.py
+          python -m py_compile platforms/_common.py
+          python -m py_compile platforms/windows.py
+          python -m py_compile platforms/darwin.py
+          python -m py_compile platforms/linux.py
 
       - name: Smoke test
         run: |
           python -c "
-          from app import app, scan_ports, _is_system_process, SYSTEM_PROCESSES, SYSTEM_USERS
+          from app import app, scan_ports, _is_system_process, _system_registry
+          SYSTEM_PROCESSES = _system_registry.processes
+          SYSTEM_USERS = _system_registry.users
 
           s = scan_ports()
           items = s['items']
           sys_items = [r for r in items if r['is_system']]
           assert s['summary']['hidden'] == len(sys_items), 'summary.hidden mismatch'
           assert len(SYSTEM_PROCESSES) >= 40, 'SYSTEM_PROCESSES should have 40+ entries'
-          assert 'svchost.exe' in SYSTEM_PROCESSES
           assert len(SYSTEM_USERS) >= 4, 'SYSTEM_USERS should have 4+ entries'
 
           with app.test_client() as c:
